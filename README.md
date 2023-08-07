@@ -106,5 +106,66 @@ ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cl
 
 ## Python Script Showing Example Usage
 
-Once you have deployed everything to your ansible inventory and verified that ts_server is running on the right port and awaiting requests, you can run the example python script. To 
+### Overview:
+Once you have deployed everything to your ansible inventory and verified that ts_server is running on the right port and awaiting requests, you can run the example python script. This script is designed to efficiently send parallel requests to a cluster of `ts_server` nodes for the purpose of chatbot-like interactions. The primary use case demonstrated here is to obtain movie synopses and detailed descriptions of a list of movies using the `llama2_13B_chat` model deployed across the cluster.
+
+### Details:
+
+#### 1. **Imports and Configurations**:
+The script starts by importing necessary libraries like `httpx` (for asynchronous HTTP requests), `asyncio`, and others. It also sets up some constants like `CONCURRENT_REQUESTS`, `RETRY_COUNT`, and timeouts.
+
+#### 2. **Extracting IPs from Ansible Inventory** (`extract_ips_from_ansible_inventory`):
+This function reads an Ansible inventory file (either YAML or INI format) and extracts IP addresses of all the hosts, saving them in a text file. This list of IP addresses represents the nodes in the `ts_server` cluster.
+
+#### 3. **IP Validation and Availability Check** (`validate_ip`, `check_ip_availability`):
+- `validate_ip`: Validates if a given string is a proper IP address.
+- `check_ip_availability`: Asynchronously checks if the `ts_server` on a given IP is responsive by sending a GET request to its root path.
+
+#### 4. **Single Server Testing** (`test_single_server`):
+This function sends a predefined prompt to a given `ts_server` IP to test its responsiveness and measures both the time taken to acknowledge the request and the time taken for the completion of the inference.
+
+#### 5. **Testing All Servers** (`test_ts_servers`):
+This function reads the list of IP addresses from the text file, validates them, and tests each one using the aforementioned single server test function. It then collates the results.
+
+#### 6. **Sending Requests to Servers** (`send_request`):
+This asynchronous function sends a chat prompt to a given `ts_server` IP. It handles HTTP errors and read timeouts and will retry sending the request if it fails, up to a predefined `RETRY_COUNT`.
+
+#### 7. **Round Robin Request Processing** (`round_robin_request`):
+The script employs a round-robin strategy to distribute prompts to the servers. Live IPs are first determined by checking their availability. Then, using semaphores to limit concurrent requests, the script sends prompts to the servers in a cyclic manner. This ensures an even distribution of workload across the cluster.
+
+#### 8. **Generating Movie Prompts** (`generate_movie_synopsis_prompt`, `generate_movie_synopsis_prompts`, `generate_movie_details_prompt`, `generate_movie_details_prompts`):
+These functions help generate structured prompts for the chat model:
+- For requesting a movie's synopsis.
+- For requesting detailed movie info in a JSON format.
+
+The random seed is added to ensure variability in responses, making it easier to obtain different details in case of retries.
+
+#### 9. **Processing Model Responses** (`validate_and_correct_json`, `extract_movie_title_from_prompt`, `get_movie_details`, `get_all_movie_details`):
+- The script tries to correct common issues in the model's JSON response, ensuring it's valid.
+- For movie details, the script can send multiple prompts (with retries) until it receives a valid JSON response from the model.
+
+#### 10. **Main Execution**:
+In the `if __name__ == "__main__":` block:
+- IP addresses are extracted from the Ansible inventory.
+- The `ts_servers` are tested for responsiveness.
+- Movie synopsis prompts are generated and sent to the servers.
+- Detailed movie descriptions are requested in JSON format.
+
+All results are saved to JSON files.
+
+### Design Decisions:
+
+1. **Asynchronous Operations**: The script uses Python's `asyncio` to send parallel requests to the `ts_server` nodes, maximizing the throughput and reducing the total time taken for all requests.
+  
+2. **Round Robin Distribution**: This method ensures an even distribution of requests across the cluster, preventing any single node from being a bottleneck.
+
+3. **Retries**: Given the potential for network issues or server hiccups, the script has a retry mechanism, ensuring that transient issues don't result in failed prompts.
+
+4. **Dynamic Prompt Generation**: By generating prompts dynamically, especially with random seeds, the script can elicit varied and comprehensive responses from the model.
+
+5. **Response Validation and Correction**: The script tries to sanitize and validate the model's response, ensuring that the gathered data is in the correct format.
+
+---
+
+This script provides a robust method for leveraging a cluster of `ts_server` nodes to get detailed and accurate information from the `llama2_13B_chat` model. By handling IP validation, server responsiveness checks, structured prompt generation, and response validation, it ensures reliable and consistent results.
 
