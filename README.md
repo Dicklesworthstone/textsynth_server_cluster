@@ -109,6 +109,16 @@ ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cl
 ### Overview:
 Once you have deployed everything to your ansible inventory and verified that ts_server is running on the right port and awaiting requests, you can run the example python script. This script is designed to efficiently send parallel requests to a cluster of `ts_server` nodes for the purpose of chatbot-like interactions. The primary use case demonstrated here is to obtain movie synopses and detailed descriptions of a list of movies using the `llama2_13B_chat` model deployed across the cluster.
 
+### Python Script Setup:
+These commands create a virtual environment, activate it, upgrade `pip`, and then install the required dependencies from the `requirements.txt` file:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python3 -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
 ### Details:
 
 #### 1. **Imports and Configurations**:
