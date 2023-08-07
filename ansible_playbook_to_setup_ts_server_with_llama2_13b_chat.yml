@@ -1,0 +1,24 @@
+---
+- name: Deploy and run ts_server with llama2_13b_chat
+  hosts: all
+  gather_facts: yes
+  become: yes
+  tasks:
+    - name: Copy bash script to remote host
+      copy:
+        src: run_ts_server_with_llama2_13b_chat_on_ubuntu.sh
+        dest: /home/ubuntu/run_ts_server_with_llama2_13b_chat_on_ubuntu.sh
+        mode: '0755'
+      become_user: ubuntu
+
+    - name: Execute the bash script
+      shell: bash /home/ubuntu/run_ts_server_with_llama2_13b_chat_on_ubuntu.sh
+      args:
+        executable: /bin/bash
+      become_user: ubuntu
+
+    - name: Clean up temporary script file
+      file:
+        path: /home/ubuntu/run_ts_server_with_llama2_13b_chat_on_ubuntu.sh
+        state: absent
+      become_user: ubuntu
