@@ -19,25 +19,75 @@ By distributing inference requests across multiple servers, you can efficiently 
 
 ### Prerequisites
 
-- A collection of Ubuntu servers.
+- A collection of Ubuntu servers (tested on Ubuntu 22.04).
 - Ansible for deployment.
 - Python 3.x.
+- To install Ansible:
+```bash
+sudo apt update
+sudo apt install ansible -y
+```
+- Prepare an ansible inventory (e.g., `my_ansible_inventory_for_ts_server_cluster.ini`) for your remote machines like this:
+```
+[ts_servers]
+server1 ansible_host=192.168.1.10 ansible_user=ubuntu
+server2 ansible_host=192.168.1.11 ansible_user=ubuntu
+server3 ansible_host=192.168.1.12 ansible_user=ubuntu
+
+[all:vars]
+ansible_ssh_private_key_file=/path/to/your/private/key.pem
+```
 
 ### Installation
 
 1. Clone the repository.
 2. Configure your Ansible inventory file with the details of your Ubuntu servers.
-3. Run the Ansible playbook to deploy ts_server and the specified language model to each server.
-4. Adjust the Python script's parameters as needed for your environment, such as the number of concurrent requests and timeout settings.
+3. Customize `run_ts_server_with_llama2_13b_chat_on_ubuntu.sh` as needed to change the LLM model you want to use or the port that ts_server will listen on.
+4. Run the Ansible playbook to deploy ts_server and the specified language model to each server.
+5. Adjust the Python script's parameters as needed for your environment, such as the number of concurrent requests and timeout settings.
 
 ### Usage
 
 - Use the provided Python script to send inference requests to the cluster.
 - View the results in the specified output files.
+Certainly! Here's an expanded description that covers both the use cases shown in the code:
 
-## Example Use Case: Movie Details Extraction
+### Example Use Cases: Movie Synopsis Extraction and Movie Details Extraction
 
-Included in this project is a specific example of extracting movie details and synopses. The script generates prompts for movie details and sends them to the cluster for parallel processing. The results are then gathered and saved.
+Included in this project are two specific examples related to movies: extracting movie synopses and extracting detailed movie information. Both examples demonstrate the power of parallel processing using the created cluster of servers.
+
+#### 1. Movie Synopsis Extraction
+
+The script first generates prompts to provide short synopses for a list of movies. The prompts are designed to keep the response concise and focused on the main storyline. Example:
+
+```plaintext
+Please provide a short synopsis of the plot of the movie "Forrest Gump." Keep it concise and focused on the main storyline.
+
+Response: The synopsis of "Forrest Gump" is:
+```
+
+These prompts are then sent to the ts_server cluster, which processes them in parallel. The resulting synopses are gathered and saved to a JSON file. This demonstrates the ability to efficiently process a large number of similar requests in parallel.
+
+#### 2. Movie Details Extraction
+
+The second use case extracts detailed information about movies in the form of a JSON object. The details include the movie's title, release year, director, genre, and main actors. Example prompt:
+
+```plaintext
+Random Seed: 42
+
+Please provide details of the movie "The Godfather" in the form of a JSON object with the following keys:
+- "title": Title of the movie
+- "release_year": Year the movie was released
+- "director": Name of the director
+- "genre": Genre of the movie
+- "main_actors": List of main actors
+
+Response: The details of "The Godfather" are:
+```
+
+The script takes care to validate and correct any JSON formatting issues in the model's response. If the JSON is not valid, the script retries with a different random seed, ensuring robustness in handling potential inconsistencies in the responses.
+
+These two use cases showcase different aspects of the cluster's functionality. The synopsis extraction highlights the efficiency of parallel processing, while the details extraction demonstrates more complex interaction with the model, including data validation and error handling. Combined, they provide a powerful example of how the cluster can be leveraged for diverse and complex tasks.
 
 ## TS Server Installation Script
 
@@ -89,19 +139,19 @@ This playbook automates the deployment and execution of ts_server across multipl
 To execute the playbook, run the following command:
 
 ```bash
-ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i my_ansible_inventory_for_ts_server_cluster.yml ansible_playbook_to_setup_ts_server_with_llama2_13b_chat.yml -f 50
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i my_ansible_inventory_for_ts_server_cluster.ini all ansible_playbook_to_setup_ts_server_with_llama2_13b_chat.yml -f 50
 ```
 
 You can see if the remote machines are listening on the correcto port like this:
 
 ```bash
- ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.yml -m shell -a "sudo lsof -i -P -n | grep ts_server" -f 50
+ ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.ini all -m shell -a "sudo lsof -i -P -n | grep ts_server" -f 50
 ```
 
 And you can check the log files on the remote machines easily like this:
 
 ```bash
-ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.yml -m shell -a "tail -n 10 /home/ubuntu/ts_server_free-2023-07-21/ts_server.log" -f 50
+ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.ini all -m shell -a "tail -n 10 /home/ubuntu/ts_server_free-2023-07-21/ts_server.log" -f 50
 ```
 
 ## Python Script Showing Example Usage
