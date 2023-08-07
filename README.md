@@ -6,9 +6,7 @@ This project provides a way to utilize a collection of Ubuntu servers to create 
 
 Even if the servers do not have a GPU, they can be quickly deployed with ts_server using Ansible to automatically download and utilize a specified language model like the llama2 13b chat LLM.
 
-By distributing inference requests across multiple servers, you can efficiently process large numbers of requests in parallel. 
-
-This makes it possible to leverage existing hardware resources for scalable, concurrent processing without the need for specialized GPU hardware.
+By distributing inference requests across multiple servers, you can efficiently process large numbers of requests in parallel. This makes it possible to leverage existing hardware resources for scalable, concurrent processing without the need for specialized GPU hardware.
 
 ## How It Works
 
@@ -91,20 +89,22 @@ This playbook automates the deployment and execution of ts_server across multipl
 To execute the playbook, run the following command:
 
 ```bash
-ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i your_inventory_file.ini ansible_playbook_to_setup_ts_server_with_llama2_13b_chat.yml -f 50
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i my_ansible_inventory_for_ts_server_cluster.yml ansible_playbook_to_setup_ts_server_with_llama2_13b_chat.yml -f 50
 ```
 
 You can see if the remote machines are listening on the correcto port like this:
 
 ```bash
- ANSIBLE_HOST_KEY_CHECKING=False ansible -i your_inventory_file.ini -m shell -a "sudo lsof -i -P -n | grep ts_server" -f 50
+ ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.yml -m shell -a "sudo lsof -i -P -n | grep ts_server" -f 50
 ```
 
 And you can check the log files on the remote machines easily like this:
 
 ```bash
-ANSIBLE_HOST_KEY_CHECKING=False ansible -i your_inventory_file.ini -m shell -a "tail -n 10 /home/ubuntu/ts_server_free-2023-07-21/ts_server.log" -f 50
+ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.yml -m shell -a "tail -n 10 /home/ubuntu/ts_server_free-2023-07-21/ts_server.log" -f 50
 ```
 
+## Python Script Showing Example Usage
 
+Once you have deployed everything to your ansible inventory and verified that ts_server is running on the right port and awaiting requests, you can run the example python script. To 
 
