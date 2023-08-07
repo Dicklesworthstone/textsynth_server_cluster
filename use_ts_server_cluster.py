@@ -13,11 +13,12 @@ import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-CONCURRENT_REQUESTS = 100  # Adjust as needed
-RETRY_COUNT = 3  # Adjust as needed
+CONCURRENT_REQUESTS = 50  # Adjust as needed
+RETRY_COUNT = 2  # Adjust as needed
 TIMEOUT_FOR_INFERENCE_IN_SECONDS = 60.0  # Adjust as needed
-MAX_TOKENS_IN_RESPONSE = 500  # Adjust as needed
-file_path_to_ansible_inventory_file = 'je_mainnet_masternode_inventory__flat.yml'
+MAX_TOKENS_IN_RESPONSE = 100  # Adjust as needed
+TS_SERVER_LISTEN_PORT = 8088 #If you change this, you'll need to change the port in the TS server's config file in the `run_ts_server_with_llama2_13b_chat_on_ubuntu.sh` script.
+file_path_to_ansible_inventory_file = 'my_ansible_inventory_for_ts_server_cluster.yml'
 
 
 def extract_ips_from_ansible_inventory(inventory_filepath, output_filepath='list_of_ts_server_ips.txt'):
@@ -52,11 +53,11 @@ def validate_ip(ip):
         return False
 
 
-async def check_ip_availability(client, ip):
+async def check_ip_availability(client, ip, port=TS_SERVER_LISTEN_PORT):
     if not validate_ip(ip):
         logger.warning(f"IP {ip} is not a valid IP address and will be excluded from the request list.")
         return None
-    url = f"http://{ip}:8088/"
+    url = f"http://{ip}:{TS_SERVER_LISTEN_PORT}/"
     try:
         response = await client.get(url)
         return ip if response.status_code == 200 else None
@@ -65,16 +66,13 @@ async def check_ip_availability(client, ip):
     
 
 async def test_single_server(client, ip, prompt, timeout, max_tokens=10):
-    start_time = time.time()
-    url = f"http://{ip}:8088/v1/engines/llama2_13B_chat/completions"
+    url = f"http://{ip}:{TS_SERVER_LISTEN_PORT}/v1/engines/llama2_13B_chat/completions"
     data = {"prompt": prompt, "max_tokens": max_tokens}
     headers = {"Content-Type": "application/json"}
     try:
         response = await client.post(url, json=data, headers=headers, timeout=timeout)
-        acknowledge_time = time.time() - start_time
         completion_time = response.elapsed.total_seconds()
         return {
-            "acknowledge_time": acknowledge_time,
             "completion_time": completion_time,
             "response": response.json()
         }
@@ -84,13 +82,12 @@ async def test_single_server(client, ip, prompt, timeout, max_tokens=10):
 
 
 async def test_ts_servers():
-    prompt = "The capital of France is "
+    prompt = "Respond to this question:\n The capital of France is:\n"
     timeout = httpx.Timeout(TIMEOUT_FOR_INFERENCE_IN_SECONDS, connect=5.0)  # Adjust as needed
     results = {}
-    async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=2.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0)) as client:
         with open('list_of_ts_server_ips.txt', 'r') as f:
             ip_addresses = f.read().splitlines()
-
         for ip in ip_addresses:
             if not validate_ip(ip):
                 logger.warning(f"IP {ip} is not a valid IP address and will be excluded from the test.")
@@ -103,54 +100,68 @@ async def test_ts_servers():
 
 async def send_request(client, ip, prompt, semaphore, retries=RETRY_COUNT):
     async with semaphore:
-        url = f"http://{ip}:8088/v1/engines/llama2_13B_chat/completions"
+        logger.info(f"Sending request to {ip}:{TS_SERVER_LISTEN_PORT} for prompt: {prompt}. Retries remaining: {retries}")
+        url = f"http://{ip}:{TS_SERVER_LISTEN_PORT}/v1/engines/llama2_13B_chat/completions"
         data = {"prompt": prompt, "max_tokens": MAX_TOKENS_IN_RESPONSE}
         headers = {"Content-Type": "application/json"}
         timeout = httpx.Timeout(TIMEOUT_FOR_INFERENCE_IN_SECONDS, connect=5.0)  # Adjust as needed
         try:
             response = await client.post(url, json=data, headers=headers, timeout=timeout)
+            logger.info(f"Received response from {ip}:{TS_SERVER_LISTEN_PORT} for prompt: {prompt}")
             return prompt, response.json()
         except (httpx.HTTPError, httpx.ReadTimeout) as e:
-            logger.warning(f"Request to {ip} failed for prompt: {prompt}. Error: {str(e)}")
+            logger.warning(f"Request to {ip}:{TS_SERVER_LISTEN_PORT} failed for prompt: {prompt}. Error: {str(e)}")
             if retries > 0:
                 return await send_request(client, ip, prompt, semaphore, retries - 1)
+            logger.error(f"Failed to get response from {ip}:{TS_SERVER_LISTEN_PORT} for prompt: {prompt} after all retries.")
             return prompt, None
 
 
 async def process_requests(client, ip_iterator, semaphore, prompt_queue, results):
+    logger.info("Starting a process_requests worker...")
     while True:
         prompt = await prompt_queue.get()
         if prompt is None:
+            logger.info("Received a None prompt, ending this worker.")
             break
         ip = next(ip_iterator)
+        logger.info(f"Processing prompt: {prompt} on IP: {ip}:{TS_SERVER_LISTEN_PORT}")
         prompt, result = await send_request(client, ip, prompt, semaphore)
         if result:
             results[prompt] = result
+            logger.info(f"Saved result for prompt: {prompt}")
+        else:
+            logger.warning(f"No result received for prompt: {prompt}")
         prompt_queue.task_done()
+        logger.info(f"Finished processing prompt: {prompt}")
+    logger.info("Ending process_requests worker.")
 
 
 async def round_robin_request(prompts):
+    logger.info("Starting round-robin request processing...")
     semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
     async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT_FOR_INFERENCE_IN_SECONDS, connect=2.0)) as client:
         # Check IP availability
         with open('list_of_ts_server_ips.txt', 'r') as f:
             ip_addresses = f.read().splitlines()
-        ip_check_tasks = [check_ip_availability(client, ip) for ip in ip_addresses]
+        ip_check_tasks = [check_ip_availability(client, ip, TS_SERVER_LISTEN_PORT) for ip in ip_addresses]
         live_ips = [ip for ip in await asyncio.gather(*ip_check_tasks) if ip]
         non_responsive_ips = set(ip_addresses) - set(live_ips)
         for ip in non_responsive_ips:
-            logger.warning(f"IP {ip} is not responding and will be excluded from the request list.")
+            logger.warning(f"IP {ip}:{TS_SERVER_LISTEN_PORT} is not responding and will be excluded from the request list.")
         results = {}
         ip_iterator = cycle(live_ips)
         prompt_queue = asyncio.Queue()
         for prompt in prompts:
             await prompt_queue.put(prompt)
+        logger.info(f"Added {len(prompts)} prompts to the queue.")
         worker_tasks = [process_requests(client, ip_iterator, semaphore, prompt_queue, results)
                         for _ in range(CONCURRENT_REQUESTS)]
         await prompt_queue.join()
         for _ in range(CONCURRENT_REQUESTS):
             await prompt_queue.put(None)
         await asyncio.gather(*worker_tasks)
+    logger.info("Round-robin request processing completed.")
     return results
 
 
@@ -226,21 +237,33 @@ async def get_movie_details(movie_title: str):
 
 
 def extract_movie_title_from_prompt(prompt: str) -> str:
+    logger.info(f"Extracting movie title from prompt: {prompt}")
     match = re.search(r'\"(.*?)\"', prompt)
-    return match.group(1) if match else None
+    title = match.group(1) if match else None
+    logger.info(f"Extracted movie title: {title}")
+    return title
 
 
 async def get_all_movie_details():
+    logger.info("Generating movie details prompts...")
     movie_details_prompts = generate_movie_details_prompts()
+    logger.info("Sending movie details prompts to ts servers...")
     results = await round_robin_request(movie_details_prompts)
-    movie_details = {} # Dictionary to store the final details for each movie
-    for prompt, result in results.items(): # Iterate through the results and validate the JSON
+    movie_details = {}  # Dictionary to store the final details for each movie
+    logger.info("Processing results from ts servers...")
+    for prompt, result in results.items():  # Iterate through the results and validate the JSON
         if result:
             model_response_text = result["response"]["choices"][0]["text"]
             is_valid, json_data = validate_and_correct_json(model_response_text)
             if is_valid:
                 movie_title = extract_movie_title_from_prompt(prompt)  # Function to get movie title from prompt
                 movie_details[movie_title] = json_data
+                logger.info(f"Saved movie details for: {movie_title}")
+            else:
+                logger.warning(f"Invalid JSON response for prompt: {prompt}")
+        else:
+            logger.warning(f"No result received for prompt: {prompt}")
+    logger.info("Finished processing all movie details.")
     return movie_details
 
 
@@ -253,10 +276,12 @@ if __name__ == "__main__":
 
     try:
         extract_ips_from_ansible_inventory(file_path_to_ansible_inventory_file)
-        use_test_ts_servers = True
+        use_test_ts_servers = 0
         if use_test_ts_servers:
             test_results = asyncio.run(test_ts_servers())
             logger.info(test_results)
+            with open('ts_server_test_results.json', 'w') as f:
+                f.write(json.dumps(test_results, indent=4))
         logger.info(f"Generating prompts for movie synopsis task for {len(MOVIE_TITLES)} movies...")
         list_of_prompts = generate_movie_synopsis_prompts()
         logger.info(f"Sending {len(list_of_prompts)} prompts to the ts servers...")
