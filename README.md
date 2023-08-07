@@ -139,19 +139,19 @@ This playbook automates the deployment and execution of ts_server across multipl
 To execute the playbook, run the following command:
 
 ```bash
-ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i my_ansible_inventory_for_ts_server_cluster.ini all ansible_playbook_to_setup_ts_server_with_llama2_13b_chat.yml -f 50
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i my_ansible_inventory_for_ts_server_cluster.ini ansible_playbook_to_setup_ts_server_with_llama2_13b_chat.yml -f 50
 ```
 
 You can see if the remote machines are listening on the correcto port like this:
 
 ```bash
- ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.ini all -m shell -a "sudo lsof -i -P -n | grep ts_server" -f 50
+ ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.ini -m shell -a "sudo lsof -i -P -n | grep ts_server" -f 50
 ```
 
 And you can check the log files on the remote machines easily like this:
 
 ```bash
-ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.ini all -m shell -a "tail -n 10 /home/ubuntu/ts_server_free-2023-07-21/ts_server.log" -f 50
+ANSIBLE_HOST_KEY_CHECKING=False ansible -i my_ansible_inventory_for_ts_server_cluster.ini -m shell -a "tail -n 10 /home/ubuntu/ts_server_free-2023-07-21/ts_server.log" -f 50
 ```
 
 ## Python Script Showing Example Usage
