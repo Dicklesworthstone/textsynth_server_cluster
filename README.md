@@ -132,7 +132,7 @@ This function reads an Ansible inventory file (either YAML or INI format) and ex
 - `check_ip_availability`: Asynchronously checks if the `ts_server` on a given IP is responsive by sending a GET request to its root path.
 
 #### 4. **Single Server Testing** (`test_single_server`):
-This function sends a predefined prompt to a given `ts_server` IP to test its responsiveness and measures both the time taken to acknowledge the request and the time taken for the completion of the inference.
+This function sends a predefined prompt to a given `ts_server` IP to test its responsiveness and measures the time taken for the completion of the inference.
 
 #### 5. **Testing All Servers** (`test_ts_servers`):
 This function reads the list of IP addresses from the text file, validates them, and tests each one using the aforementioned single server test function. It then collates the results.
